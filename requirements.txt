@@ -1,1 +1,7 @@
+For now:
+
+spotipy
+requests
+python-dotenv
+rich  # for CLI 
 
