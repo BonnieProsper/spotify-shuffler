@@ -11,6 +11,10 @@ Features:
 Notes for user:
 - For production, don't persist refresh tokens to plaintext files.
 - Make sure the redirect URI is registered in your Spotify app settings.
+
+Token Persistence (remember):
+Saved to JSON file, don't commit that file to git, avoid storing plaintext refresh tokens 
+in shared machines or cloud. Mention this in README and ignore file using .gitignore.
 """
 
 from __future__ import annotations
