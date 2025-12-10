@@ -74,7 +74,7 @@ def main():
     uris = [t["track"]["uri"] for t in shuffled]
 
     # Make a new playlist rather than destroy the original
-    new_name = "Shuffled — " + (args.playlist or "Unknown")
+    new_name = "Shuffled - " + (args.playlist or "Unknown")
     new_playlist = client.make_new_playlist(new_name)
     client.add_tracks(new_playlist["id"], uris)
 
