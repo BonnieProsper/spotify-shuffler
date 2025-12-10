@@ -1,4 +1,4 @@
-# src/shuffler/cli.py
+# app/ui/cli.py
 """
 Small CLI for demo: fetch playlist, shuffle, optionally create new playlist
 """
