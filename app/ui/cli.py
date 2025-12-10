@@ -1,59 +1,85 @@
 # app/ui/cli.py
-"""
-Small CLI for demo: fetch playlist, shuffle, optionally create new playlist
-"""
+import argparse
+import sys
 
-import json
-import os
-from typing import List
-
-from shuffler.spotify_client import SpotifyClient
-from shuffler.shuffle_engine import anti_repeat_shuffle
-
-SAMPLE_PATH = os.path.join(os.path.dirname(__file__), "..", "examples", "sample_playlist.json")
-
-
-def load_local_sample() -> List[dict]:
-    with open(SAMPLE_PATH, "r", encoding="utf8") as fh:
-        return json.load(fh)
+from app.settings import Settings
+from app.auth import AuthManager
+from app.spotify.client import SpotifyClient
+from app.shuffle.engine import ShuffleEngine
 
 
 def main():
-    client_id = os.environ.get("SPOTIFY_CLIENT_ID")
-    client_use_api = bool(client_id)  # simple toggle: set env var to use real API
-    if client_use_api:
-        sc = SpotifyClient(client_id=client_id)
-        try:
-            sc.start_pkce_flow()
-        except Exception as e:
-            print("Auth failed. Falling back to local sample:", e)
-            tracks = load_local_sample()
-        else:
-            pl_id = input("Enter playlist id or uri: ").strip()
-            tracks = sc.get_playlist_tracks(pl_id)
-    else:
-        print("No SPOTIFY_CLIENT_ID found - using local sample.")
-        tracks = load_local_sample()
+    parser = argparse.ArgumentParser(
+        description="Custom Spotify Shuffler"
+    )
 
-    # tracks are Spotify track objects, use id/uri/name/artists
-    shuffled = anti_repeat_shuffle(tracks, repeat_window=4, avoid_same_artist=True)
+    parser.add_argument("--playlist", "-p", help="Playlist ID to shuffle")
+    parser.add_argument("--weighted", action="store_true", help="Use weighted shuffle")
+    parser.add_argument("--min-gap", type=int, default=3,
+                        help="Min gap between same artist (default=3)")
+    parser.add_argument("--dry", action="store_true",
+                        help="Don't write playlist back to Spotify")
 
-    # preview
-    for i, t in enumerate(shuffled[:30], 1):
-        art = t.get("artists", [{}])[0].get("name", "Unknown")
-        print(f"{i:02d}. {t.get('name')} — {art}")
+    args = parser.parse_args()
 
-    # optionally create playlist (only if using API)
-    if client_use_api:
-        create = input("Create new playlist with this order? (y/N): ").lower() == "y"
-        if create:
-            me = sc._get(SPOTIFY_API + "/me")
-            new = sc.create_playlist(me["id"], "Shuffled — custom")
-            uris = [t["uri"] for t in shuffled]
-            sc.add_tracks_to_playlist(new["id"], uris)
-            print("Created playlist:", new["external_urls"].get("spotify"))
-    else:
-        out = {"shuffled": shuffled}
-        with open("shuffled_preview.json", "w", encoding="utf8") as fh:
-            json.dump(out, fh, ensure_ascii=False, indent=2)
-        print("Wrote shuffled_preview.json")
+    settings = Settings()
+
+    # --- auth ---
+    auth = AuthManager(settings)
+    try:
+        token = auth.load_token()
+    except Exception:
+        print("No cached token. Running OAuth...")
+        token = auth.oauth_login()
+
+    client = SpotifyClient(settings, token)
+
+    # --- fetch playlist ---
+    if not args.playlist:
+        print("No playlist specified. Use --playlist <id>")
+        sys.exit(1)
+
+    print(f"Fetching playlist {args.playlist}...")
+    tracks = client.get_playlist_tracks(args.playlist)
+
+    if not tracks:
+        print("Playlist empty or not found.")
+        sys.exit(1)
+
+    print(f"Loaded {len(tracks)} tracks.")
+
+    # --- shuffle engine ---
+    engine = ShuffleEngine(
+        min_artist_gap=args.min_gap,
+        weighted=args.weighted,
+    )
+
+    print("Shuffling...")
+    shuffled = engine.run(tracks)
+
+    print("First 5 tracks after shuffle:")
+    for t in shuffled[:5]:
+        name = t.get("track", {}).get("name")
+        artist = t.get("track", {}).get("artists", [{}])[0].get("name")
+        print(f"  • {name} — {artist}")
+
+    # --- write back to Spotify ---
+    if args.dry:
+        print("Dry run. Not writing playlist.")
+        return
+
+    print("Writing shuffled order back to Spotify...")
+
+    # Spotify needs only track URIs for reordering
+    uris = [t["track"]["uri"] for t in shuffled]
+
+    # Make a new playlist rather than destroy the original
+    new_name = "Shuffled — " + (args.playlist or "Unknown")
+    new_playlist = client.make_new_playlist(new_name)
+    client.add_tracks(new_playlist["id"], uris)
+
+    print(f"Done. New playlist created: {new_playlist['external_urls']['spotify']}")
+
+
+if __name__ == "__main__":
+    main()
