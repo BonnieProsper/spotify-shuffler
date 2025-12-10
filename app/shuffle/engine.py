@@ -22,6 +22,16 @@ class ShuffleEngine:
         if not tracks:
             return []
 
+        # adapt engine to models.py, A or B
+        raw_items = client.get_playlist_tracks(playlist_id)     # list of playlist-item dicts
+        tracks = normalize_tracks(raw_items)                 # List[Track]
+        # Option A: adapt engine to accept Track 
+        engine = ShuffleEngine(min_artist_gap=3)
+        shuffled_tracks = engine.run(tracks)                # tweak engine to work with Track
+        # Option B: convert back to spotify-style dicts to reuse current engine
+        spotify_items = [{"track": t.raw} for t in shuffled_tracks]
+
+
         # copy list so original isnt mutated
         working = list(tracks)
 
