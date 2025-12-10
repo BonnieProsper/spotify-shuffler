@@ -61,7 +61,7 @@ def main():
     for t in shuffled[:5]:
         name = t.get("track", {}).get("name")
         artist = t.get("track", {}).get("artists", [{}])[0].get("name")
-        print(f"  • {name} — {artist}")
+        print(f"  • {name} - {artist}")
 
     # --- write back to Spotify ---
     if args.dry:
