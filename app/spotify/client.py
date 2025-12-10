@@ -4,6 +4,7 @@ import requests
 
 from app.core.settings import settings
 from app.spotify.auth import TokenManager
+from app.shuffle.engine import ShuffleEngine
 
 
 class SpotifyClient:
@@ -72,6 +73,20 @@ class SpotifyClient:
 
     def get_playlist_tracks(self, playlist_id):
         # Spotify is paginated so fetch until done
+        # new/include??:
+        engine = ShuffleEngine(min_artist_gap=3, weighted=False)
+        shuffled_tracks = engine.run(raw_items)  # raw_items can be playlist item dicts
+        
+        """Or:
+        
+        from app.shuffle.models import normalize_tracks # at top
+        tracks = normalize_tracks(raw_items)
+        shuffled_tracks = engine.run(tracks)  # Track objects
+        """
+        uris = [t.to_spotify_uri() for t in shuffled_tracks if t.to_spotify_uri()]
+        # finish check of new additions
+        
+        
         items = []
         url = f"playlists/{playlist_id}/tracks"
         params = {"limit": 100}
